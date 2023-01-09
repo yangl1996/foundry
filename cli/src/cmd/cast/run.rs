@@ -152,6 +152,7 @@ impl RunArgs {
 
             configure_tx_env(&mut env, &tx);
 
+            println!("executing transaction {}", tx.hash);
             if let Some(to) = tx.to {
                 trace!(tx=?tx.hash,to=?to, "executing call transaction");
                 let RawCallResult {

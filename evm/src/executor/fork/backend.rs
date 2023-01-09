@@ -630,6 +630,7 @@ impl DatabaseRef for SharedBackend {
 
     fn basic(&self, address: H160) -> Result<Option<AccountInfo>, Self::Error> {
         trace!( target: "sharedbackend", "request basic {:?}", address);
+        println!("fetching account info (case 5) for account {}", address);
         self.do_get_basic(address).map_err(|err| {
             error!(target: "sharedbackend",  ?err, ?address,  "Failed to send/recv `basic`");
             err
@@ -637,11 +638,13 @@ impl DatabaseRef for SharedBackend {
     }
 
     fn code_by_hash(&self, hash: H256) -> Result<Bytecode, Self::Error> {
+        println!("fetching code (case 5) for hash {}", hash);
         Err(DatabaseError::MissingCode(hash))
     }
 
     fn storage(&self, address: H160, index: U256) -> Result<U256, Self::Error> {
         trace!( target: "sharedbackend", "request storage {:?} at {:?}", address, index);
+        println!("fetching storage (case 5) for account {} at index {}", address, index);
         self.do_get_storage(address, index).map_err(|err| {
             error!( target: "sharedbackend", ?err, ?address, ?index, "Failed to send/recv `storage`");
           err
@@ -649,6 +652,7 @@ impl DatabaseRef for SharedBackend {
     }
 
     fn block_hash(&self, number: U256) -> Result<H256, Self::Error> {
+        println!("fetching block hash (case 5) for height {}", number);
         if number > U256::from(u64::MAX) {
             return Ok(KECCAK_EMPTY)
         }

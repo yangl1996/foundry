@@ -155,18 +155,22 @@ impl Database for ForkedDatabase {
         // Note: this will always return Some, since the `SharedBackend` will always load the
         // account, this differs from `<CacheDB as Database>::basic`, See also
         // [MemDb::ensure_loaded](crate::executor::backend::MemDb::ensure_loaded)
+        println!("fetching account info (case 1) for account {}", address);
         Database::basic(&mut self.cache_db, address)
     }
 
     fn code_by_hash(&mut self, code_hash: H256) -> Result<Bytecode, Self::Error> {
+        println!("fetching code (case 1) for hash {}", code_hash);
         Database::code_by_hash(&mut self.cache_db, code_hash)
     }
 
     fn storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        println!("fetching storage (case 1) for account {} at index {}", address, index);
         Database::storage(&mut self.cache_db, address, index)
     }
 
     fn block_hash(&mut self, number: U256) -> Result<H256, Self::Error> {
+        println!("fetching block hash (case 1) for height {}", number);
         Database::block_hash(&mut self.cache_db, number)
     }
 }
@@ -175,18 +179,22 @@ impl DatabaseRef for ForkedDatabase {
     type Error = DatabaseError;
 
     fn basic(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        println!("fetching account info (case 2) for account {}", address);
         self.cache_db.basic(address)
     }
 
     fn code_by_hash(&self, code_hash: H256) -> Result<Bytecode, Self::Error> {
+        println!("fetching code (case 2) for hash {}", code_hash);
         self.cache_db.code_by_hash(code_hash)
     }
 
     fn storage(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        println!("fetching storage (case 2) for account {} at index {}", address, index);
         DatabaseRef::storage(&self.cache_db, address, index)
     }
 
     fn block_hash(&self, number: U256) -> Result<H256, Self::Error> {
+        println!("fetching block hash (case 2) for height {}", number);
         self.cache_db.block_hash(number)
     }
 }
@@ -210,6 +218,7 @@ pub struct ForkDbSnapshot {
 
 impl ForkDbSnapshot {
     fn get_storage(&self, address: Address, index: U256) -> Option<U256> {
+        println!("fetching storage (case 3) for account {} at index {}", address, index);
         self.local.accounts.get(&address).and_then(|account| account.storage.get(&index)).copied()
     }
 }
@@ -221,6 +230,7 @@ impl DatabaseRef for ForkDbSnapshot {
     type Error = DatabaseError;
 
     fn basic(&self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
+        println!("fetching account info (case 4) for account {}", address);
         match self.local.accounts.get(&address) {
             Some(account) => Ok(Some(account.info.clone())),
             None => {
@@ -235,10 +245,12 @@ impl DatabaseRef for ForkDbSnapshot {
     }
 
     fn code_by_hash(&self, code_hash: H256) -> Result<Bytecode, Self::Error> {
+        println!("fetching code (case 4) for hash {}", code_hash);
         self.local.code_by_hash(code_hash)
     }
 
     fn storage(&self, address: Address, index: U256) -> Result<U256, Self::Error> {
+        println!("fetching storage (case 4) for account {} at index {}", address, index);
         match self.local.accounts.get(&address) {
             Some(account) => match account.storage.get(&index) {
                 Some(entry) => Ok(*entry),
@@ -255,6 +267,7 @@ impl DatabaseRef for ForkDbSnapshot {
     }
 
     fn block_hash(&self, number: U256) -> Result<H256, Self::Error> {
+        println!("fetching block hash (case 4) for height {}", number);
         match self.snapshot.block_hashes.get(&number).copied() {
             None => self.local.block_hash(number),
             Some(block_hash) => Ok(block_hash),
