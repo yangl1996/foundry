@@ -793,6 +793,11 @@ impl Backend {
 
         Ok(None)
     }
+
+    pub fn test(&self) {
+        println!("test");
+    }
+
 }
 
 // === impl a bunch of `revm::Database` adjacent implementations ===

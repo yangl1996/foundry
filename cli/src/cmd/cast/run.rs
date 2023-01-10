@@ -5,7 +5,7 @@ use ethers::{
     abi::Address,
     prelude::{artifacts::ContractBytecodeSome, ArtifactId, Middleware},
     solc::utils::RuntimeOrHandle,
-    types::H256,
+    types::{H256, TraceType},
 };
 use eyre::WrapErr;
 use forge::{
@@ -30,6 +30,8 @@ pub struct RunArgs {
     tx_hash: String,
     #[clap(short, long, env = "ETH_RPC_URL", value_name = "URL")]
     rpc_url: Option<String>,
+    #[clap(short, long, env = "ALT_ETH_RPC_URL", value_name = "URL")]
+    alt_rpc_url: Option<String>,
     #[clap(long, short = 'd', help = "Debugs the transaction.")]
     debug: bool,
     #[clap(long, short = 't', help = "Print out opcode traces.")]
@@ -71,6 +73,9 @@ impl RunArgs {
         let rpc_url = try_consume_config_rpc_url(self.rpc_url)?;
         let provider = try_get_http_provider(&rpc_url)?;
 
+        let alt_rpc_url = try_consume_config_rpc_url(self.alt_rpc_url)?;
+        let alt_provider = try_get_http_provider(&alt_rpc_url)?;
+
         let tx_hash = H256::from_str(&self.tx_hash).wrap_err("invalid tx hash")?;
         let tx = provider
             .get_transaction(tx_hash)
@@ -86,9 +91,16 @@ impl RunArgs {
         // which we access the data in order to execute the transaction(s)
         evm_opts.fork_block_number = Some(tx_block_number - 1);
 
+        // Download the block we are going to execute
+        let block = provider.get_block_with_txs(tx_block_number).await?;
+
         // Set up the execution environment
         let env = evm_opts.evm_env().await;
         let db = Backend::spawn(evm_opts.get_fork(&config, env.clone()));
+
+        // Prefetch the relevant account states and cache it in the backend db
+        println!("Prefetching account states touched by the transaction.");
+        let trace = alt_provider.trace_replay_block_transactions(tx_block_number.into(), vec![TraceType::StateDiff]).await?;
 
         // configures a bare version of the evm executor: no cheatcode inspector is enabled,
         // tracing will be enabled only for the targeted transaction
@@ -100,8 +112,6 @@ impl RunArgs {
 
         let mut env = executor.env().clone();
         env.block.number = tx_block_number.into();
-
-        let block = provider.get_block_with_txs(tx_block_number).await?;
         if let Some(ref block) = block {
             env.block.timestamp = block.timestamp;
             env.block.coinbase = block.author.unwrap_or_default();
@@ -110,6 +120,7 @@ impl RunArgs {
             env.block.basefee = block.base_fee_per_gas.unwrap_or_default();
             env.block.gas_limit = block.gas_limit;
         }
+
 
         // Set the state to the moment right before the transaction
         if !self.quick {

@@ -8,7 +8,7 @@ use ethers_providers::{
     RetryClientBuilder, DEFAULT_LOCAL_POLL_INTERVAL,
 };
 use eyre::WrapErr;
-use reqwest::{IntoUrl, Url};
+use reqwest::{IntoUrl, Url, header::{HeaderMap, HeaderValue}};
 use std::{borrow::Cow, time::Duration};
 
 /// Helper type alias for a retry provider
@@ -156,7 +156,10 @@ impl ProviderBuilder {
         } = self;
         let url = url?;
 
-        let client = reqwest::Client::builder().timeout(timeout).build()?;
+        let mut fake_origin = HeaderMap::new();
+        fake_origin.insert("Origin", HeaderValue::from_static("https://composer.alchemy.com"));
+        fake_origin.insert("User-Agent", HeaderValue::from_static("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Safari/605.1.15"));
+        let client = reqwest::Client::builder().timeout(timeout).default_headers(fake_origin).build()?;
         let is_local = is_local_endpoint(url.as_str());
 
         let provider = Http::new_with_client(url, client);
