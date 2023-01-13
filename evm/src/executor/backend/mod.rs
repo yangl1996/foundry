@@ -10,7 +10,7 @@ use crate::{
 };
 use ethers::{
     prelude::{Block, H160, H256, U256},
-    types::{Address, BlockNumber, Transaction, U64},
+    types::{Address, BlockNumber, Transaction, U64, StateDiff, GethTransactionPrestateTrace, Bytes},
     utils::keccak256,
 };
 use hashbrown::HashMap as Map;
@@ -383,14 +383,18 @@ pub struct Backend {
 impl Backend {
     /// Creates a new Backend with a spawned multi fork thread
     pub fn spawn(fork: Option<CreateFork>) -> Self {
-        Self::new(MultiFork::spawn(), fork)
+        Self::new(MultiFork::spawn(), fork, None::<Vec<GethTransactionPrestateTrace>>)
+    }
+
+    pub fn spawn_with_prefetch(fork: Option<CreateFork>, prefetched: Vec<GethTransactionPrestateTrace>) -> Self {
+        Self::new(MultiFork::spawn(), fork, Some(prefetched))
     }
 
     /// Creates a new instance of `Backend`
     ///
     /// if `fork` is `Some` this will launch with a `fork` database, otherwise with an in-memory
     /// database
-    pub fn new(forks: MultiFork, fork: Option<CreateFork>) -> Self {
+    pub fn new(forks: MultiFork, fork: Option<CreateFork>, prefetched: Option<Vec<GethTransactionPrestateTrace>>) -> Self {
         trace!(target: "backend", forking_mode=?fork.is_some(), "creating executor backend");
         // Note: this will take of registering the `fork`
         let inner = BackendInner {
@@ -409,7 +413,30 @@ impl Backend {
         if let Some(fork) = fork {
             let (fork_id, fork, _) =
                 backend.forks.create_fork(fork).expect("Unable to create fork");
-            let fork_db = ForkDB::new(fork);
+            let mut fork_db = ForkDB::new(fork);
+            // insert the prefetched info using insert_account_* of CacheDB
+            if let Some(traces) = prefetched {
+                for t in traces {
+                    for (addr, t) in t.result.iter() {
+                        let (code, code_hash) = if !t.code.0.is_empty() {
+                            (Some(t.code.0.clone()), keccak256(&t.code).into())
+                        } else {
+                            (Some(bytes::Bytes::default()), KECCAK_EMPTY)
+                        };
+                        // update the cache
+                        let acc = AccountInfo {
+                            nonce: t.nonce,
+                            balance: t.balance,
+                            code: code.map(|bytes| Bytecode::new_raw(bytes).to_checked()),
+                            code_hash,
+                        };
+                        fork_db.insert_account_info(*addr, acc);
+                        for (slot, val) in t.storage.iter() {
+                            fork_db.insert_account_storage(*addr, *slot, *val);
+                        }
+                    }
+                }
+            }
             let fork_ids = backend.inner.insert_new_fork(
                 fork_id.clone(),
                 fork_db,

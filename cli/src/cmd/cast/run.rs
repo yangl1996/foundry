@@ -5,7 +5,7 @@ use ethers::{
     abi::Address,
     prelude::{artifacts::ContractBytecodeSome, ArtifactId, Middleware},
     solc::utils::RuntimeOrHandle,
-    types::{H256, TraceType},
+    types::{H256, TraceType, GethDebugTracingOptions, GethDebugTracerType},
 };
 use eyre::WrapErr;
 use forge::{
@@ -94,13 +94,21 @@ impl RunArgs {
         // Download the block we are going to execute
         let block = provider.get_block_with_txs(tx_block_number).await?;
 
-        // Set up the execution environment
-        let env = evm_opts.evm_env().await;
-        let db = Backend::spawn(evm_opts.get_fork(&config, env.clone()));
-
         // Prefetch the relevant account states and cache it in the backend db
         println!("Prefetching account states touched by the transaction.");
-        let trace = alt_provider.trace_replay_block_transactions(tx_block_number.into(), vec![TraceType::StateDiff]).await?;
+        let trace = alt_provider.debug_trace_block(tx_block_number, GethDebugTracingOptions{
+            disable_storage: None,
+            disable_stack: None,
+            enable_memory: None,
+            enable_return_data: None,
+            timeout: None,
+            tracer: Some(GethDebugTracerType::PrestateTracer),
+        }).await?;
+
+        // Set up the execution environment
+        let env = evm_opts.evm_env().await;
+        let db = Backend::spawn_with_prefetch(evm_opts.get_fork(&config, env.clone()), trace);
+
 
         // configures a bare version of the evm executor: no cheatcode inspector is enabled,
         // tracing will be enabled only for the targeted transaction
