@@ -416,6 +416,8 @@ impl Backend {
             let mut fork_db = ForkDB::new(fork);
             // insert the prefetched info using insert_account_* of CacheDB
             if let Some(traces) = prefetched {
+                let mut fetched_accounts: HashSet<H160> = HashSet::new();
+                let mut fetched_storages: HashSet<(H160, U256)> = HashSet::new();
                 for t in traces {
                     for (addr, t) in t.result.iter() {
                         let (code, code_hash) = if !t.code.0.is_empty() {
@@ -430,9 +432,15 @@ impl Backend {
                             code: code.map(|bytes| Bytecode::new_raw(bytes).to_checked()),
                             code_hash,
                         };
-                        fork_db.insert_account_info(*addr, acc);
+                        if !fetched_accounts.contains(addr) {
+                            fork_db.insert_account_info(*addr, acc);
+                            fetched_accounts.insert(*addr);
+                        }
                         for (slot, val) in t.storage.iter() {
-                            fork_db.insert_account_storage(*addr, *slot, *val);
+                            if !fetched_storages.contains(&(*addr, *slot)) {
+                                fork_db.insert_account_storage(*addr, *slot, *val).unwrap();
+                                fetched_storages.insert((*addr, *slot));
+                            }
                         }
                     }
                 }
